@@ -1,0 +1,47 @@
+MATCH (u:Usuário {nome: 'Nome do Usuário'})-[:OUVIU]->(g:Gênero)
+RETURN g.nome AS Genero, count(g) AS FrequenciaDeEscuta
+ORDER BY FrequenciaDeEscuta DESC
+LIMIT 5
+
+// 1. Encontra o usuário e os gêneros que ele ouviu
+MATCH (u:Usuário {nome: 'Nome do Usuário'})-[:OUVIU]->(g_ouvido:Gênero)
+
+// 2. Encontra o caminho de recomendação para um novo gênero (g_novo)
+// O nó intermediário "r" representa o que você chamou de ":Recomendação" na imagem
+MATCH (g_ouvido)-[:RECOMENDA]->(r:Recomendação)<-[:RECOMENDA]-(g_novo:Gênero)
+
+// 3. Filtra: O novo gênero (g_novo) não pode ser o mesmo que o usuário já ouviu
+WHERE NOT (u)-[:OUVIU]->(g_novo)
+  AND g_novo <> g_ouvido // Evita recomendar o mesmo gênero em geral
+
+// 4. Agrupa e Conta: Conta quantos gêneros ouvidos pelo usuário apontam para o g_novo
+RETURN g_novo.nome AS SugestaoDeGenero, 
+       COUNT(g_ouvido) AS Score,
+       COLLECT(DISTINCT g_ouvido.nome) AS BaseadoEmGeneros
+ORDER BY Score DESC
+LIMIT 10
+
+// 5. Roda a consulta de recomendação para encontrar o melhor gênero
+CALL {
+  MATCH (u:Usuário {nome: 'Nome do Usuário'})-[:OUVIU]->(g_ouvido:Gênero)
+  MATCH (g_ouvido)-[:RECOMENDA]->(r:Recomendação)<-[:RECOMENDA]-(g_novo:Gênero)
+  WHERE NOT (u)-[:OUVIU]->(g_novo) AND g_novo <> g_ouvido
+  RETURN g_novo
+  ORDER BY COUNT(g_ouvido) DESC
+  LIMIT 1
+}
+
+// 6. Encontra o usuário novamente e o gênero sugerido
+MATCH (u:Usuário {nome: 'Nome do Usuário'})
+MATCH (g_sugerido:Gênero) WHERE ID(g_sugerido) = ID(g_novo)
+
+// 7. Cria o relacionamento de Sugestão
+MERGE (u)-[s:SUGERIDO_GENERO {data: date()}]->(g_sugerido)
+RETURN u.nome, 'Sugestão Criada', g_sugerido.nome AS Gênero
+
+
+
+
+
+
+
